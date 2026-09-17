@@ -15,7 +15,7 @@ Mã nguồn được thiết kế dạng mô-đun (chia thành các Section đ�
 * **Hệ thống Phát ($\text{TX}$):** 3 cuộn dây phát từ trường độc lập ($N_{tx} = 300$ vòng, bán kính $R = 6\text{ cm}$), kích thích ở các tần số khác nhau $[5050, 6910, 5930]\text{ Hz}$.
 * **Hệ thống Thu ($\text{RX}$):** Cảm biến vi sai gồm 2 nửa cuộn dây cách nhau khoảng vi sai $d = 0.25\text{ mm}$.
   * *Đặc thù phần cứng:* Cảm biến $\text{RX}_2$ được bố trí nằm ngang hướng thẳng lên trục $Z$, trong khi $\text{RX}_3$ hướng theo trục $Y$ và $\text{RX}_1$ theo trục $X$.
-* **Dữ liệu thực nghiệm (`conenorot_data.csv`):** Chứa tín hiệu điện áp đo đạc thô ở 9 kênh ($3\text{ TX} \times 3\text{ RX}$) kết hợp với dữ liệu chuẩn Ground Truth từ thiết bị cơ khí.
+* **Dữ liệu thực nghiệm (`conenorot_2_data.csv`):** Chứa tín hiệu điện áp đo đạc thô ở 9 kênh ($3\text{ TX} \times 3\text{ RX}$) kết hợp với dữ liệu chuẩn Ground Truth từ thiết bị cơ khí.
 
 ---
 
