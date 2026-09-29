@@ -27,9 +27,10 @@ Không gian trạng thái chứa các biến có tỷ lệ chênh lệch khổng
 ### Vấn đề kỳ dị và Nguyên nhân thuật toán bị kẹt (The Singularity & Gradient Trap)
 
 Trong mô hình "Điểm từ lý tưởng" (Point Dipole) cổ điển, phương trình từ trường $\mathbf{B}$ sinh ra bởi cuộn phát được xác định bằng công thức chính xác:
+
 $$\mathbf{B} = \frac{\mu_0}{4\pi} \frac{3(\mathbf{m} \cdot \mathbf{r})\mathbf{r} - r^2\mathbf{m}}{r^5}$$
 
-*(Trong đó: $\mathbf{m}$ là momen từ, $\mathbf{r}$ là vector khoảng cách, và $r = \vert{}\mathbf{r}\vert{}$ là độ lớn khoảng cách).*
+(Trong đó: $\mathbf{m}$ là momen từ, $\mathbf{r}$ là vector khoảng cách, và $r = \vert{}\mathbf{r}\vert{}$ là độ lớn khoảng cách).
 
 Khi viên nang di chuyển sát vào cuộn phát ($r \to 0$), mô hình lý thuyết $1/r^4$ gây ra sự sụp đổ của toàn bộ thuật toán tối ưu. Quá trình "chết kẹt" này diễn ra qua 3 bước toán học:
 
@@ -47,18 +48,25 @@ Khi viên nang di chuyển sát vào cuộn phát ($r \to 0$), mô hình lý thu
 
 **Bước 1: Đưa hệ số chặn vật lý ($R^2$) vào mẫu số**
 Cuộn phát TX thực tế có bán kính **R = 60 mm**. Bằng cách tính toán từ trường cho một vòng dây có kích thước thực, bình phương bán kính $R^2$ được cộng trực tiếp vào cấu trúc mẫu số. Phương trình từ trường $\mathbf{B}$ chuẩn xác tại một nửa của cuộn vi sai trở thành:
+
 $$\mathbf{B} = \frac{\mu_0}{4\pi} \frac{3(\mathbf{m} \cdot \mathbf{r})\mathbf{r} - (r^2 + R^2)\mathbf{m}}{(r^2 + R^2)^{5/2}}$$
 
 **Bước 2: Xử lý giới hạn khi $r \to 0$**
 Nhờ sự xuất hiện của $R^2$, khi viên nang chạm mặt cuộn phát ($r = 0$), mẫu số không còn bị triệt tiêu về $0$ mà trở thành một hằng số giới hạn vật lý:
+
 $$\lim_{r \to 0} (r^2 + R^2)^{5/2} = (0 + R^2)^{5/2} = R^5$$
+
 Vì **R = 0.06 m** > 0, mẫu số luôn là một giá trị dương hữu hạn ($0.06^5 \approx 7.7 \times 10^{-7}$). Khối chóp vô cực của không gian sai số giờ đây được "bo tròn" thành một đỉnh (peak) trơn tru và an toàn.
 
 **Bước 3: Chiếu lên Cuộn Vi Sai**
 Mô hình toán học bảo toàn nguyên vẹn tính vi sai bằng cách tính $\mathbf{B}$ độc lập cho 2 vị trí cộng/trừ của cuộn thu:
+
 $$\mathbf{r}_{plus} = \mathbf{r}_{rx} + \frac{d}{2}\mathbf{\hat{n}}_{rx} - \mathbf{r}_{tx}$$
+
 $$\mathbf{r}_{minus} = \mathbf{r}_{rx} - \frac{d}{2}\mathbf{\hat{n}}_{rx} - \mathbf{r}_{tx}$$
+
 Độ lệch từ trường sinh ra dòng điện:
+
 $$EMF \propto \vert{}(\mathbf{B}_{plus} - \mathbf{B}_{minus}) \cdot \mathbf{\hat{n}}_{rx}\vert{}$$
 
 ### 🏆 Kết quả
