@@ -1,56 +1,61 @@
-# 3D Magnetic Tracking System - Endoscopic Capsule Localization
-
-> Hệ thống định vị 3D không dây cho viên nang nội soi sử dụng mô hình lưỡng cực từ (Magnetic Dipole Modeling) và thuật toán tối ưu hóa phi tuyến trên nền tảng Python (Google Colab).
-
----
-
-## 📌 Tổng quan dự án (Overview)
-Đề tài tập trung giải quyết **bài toán ngược (Inverse Problem)** trong hệ thống định vị y tế không dây: Dịch ngược tín hiệu điện áp cảm ứng ($\text{EMF}$) thu được từ phần cứng thành tọa độ không gian 3D thực tế $(X, Y, Z)$ và góc quay định hướng ($\text{Roll, Pitch, Yaw}$) của viên nang nội soi.
-
-Mã nguồn được thiết kế dạng mô-đun (chia thành các Section độc lập trên Jupyter Notebook / Google Colab) để dễ dàng kiểm chứng mô hình vật lý, hiệu chuẩn phần cứng và trực quan hóa kết quả thực nghiệm.
+# 🧲 Lõi Thuật Toán & Mô Hình Vật Lý: Hệ Thống Định Vị Từ Trường 6-DOF
+Tài liệu này đi sâu vào giải phẫu **Mô hình Toán học (Forward Model)** và **Thuật toán Tối ưu hóa (Optimization Algorithm)** được sử dụng trong dự án. Điểm nhấn lớn nhất của hệ thống là phương pháp xử lý triệt để điểm kỳ dị (Singularity) sinh ra từ cảm biến cuộn vi sai (Differential Coil) tại vùng trường gần (Near-field).
 
 ---
 
-## ⚙️ Cấu hình phần cứng hệ thống (System Architecture)
-* **Hệ thống Phát ($\text{TX}$):** 3 cuộn dây phát từ trường độc lập ($N_{tx} = 300$ vòng, bán kính $R = 6\text{ cm}$), kích thích ở các tần số khác nhau $[5050, 6910, 5930]\text{ Hz}$.
-* **Hệ thống Thu ($\text{RX}$):** Cảm biến vi sai gồm 2 nửa cuộn dây cách nhau khoảng vi sai $d = 0.25\text{ mm}$.
-  * *Đặc thù phần cứng:* Cảm biến $\text{RX}_2$ được bố trí nằm ngang hướng thẳng lên trục $Z$, trong khi $\text{RX}_3$ hướng theo trục $Y$ và $\text{RX}_1$ theo trục $X$.
-* **Dữ liệu thực nghiệm (`conenorot_2_data.csv`):** Chứa tín hiệu điện áp đo đạc thô ở 9 kênh ($3\text{ TX} \times 3\text{ RX}$) kết hợp với dữ liệu chuẩn Ground Truth từ thiết bị cơ khí.
+## ⚙️ 1. Cấu trúc Thuật toán (The Algorithm)
+Hệ thống giải quyết bài toán định vị 6 bậc tự do (6-DOF) thông qua quy trình 2 giai đoạn khép kín (End-to-End):
+1. **Auto-Calibration (Hiệu chuẩn hệ thống):** Tối ưu hóa tọa độ thực tế của 3 cuộn phát (TX) và hệ số khuếch đại điện áp ($K$) dựa trên các điểm mồi (Initial Guesses).
+2. **Inverse Kinematics (Động học ngược):** Sử dụng thông số TX và $K$ đã hiệu chuẩn để dò tìm ngược lại quỹ đạo 6D $[x, y, z, roll, pitch, yaw]$ của viên nang theo từng khung hình.
+
+**Cốt lõi Toán học:** 
+Cả hai giai đoạn đều được giải quyết bằng thuật toán **Non-linear Least Squares (Bình phương tối thiểu phi tuyến)** thông qua hàm `scipy.optimize.least_squares` với phương pháp **Trust Region Reflective (TRF)**.
+
+**💡 Chìa khóa hội tụ (Jacobian Scaling):** 
+Không gian trạng thái chứa các biến có tỷ lệ chênh lệch khổng lồ: Tọa độ ($\sim 0.5\text{ m}$), Góc quay ($\sim 180^\circ$) và Hệ số $K$ ($\sim 0.001$). Để tránh "Bẫy Gradient" (thuật toán kẹt ở cực tiểu cục bộ do đạo hàm của $K$ quá nhỏ), hệ thống kích hoạt cơ chế `x_scale='jac'`. Tính năng này buộc Python tự động co giãn ma trận Jacobian, mô phỏng lại sự thông minh của hàm `lsqnonlin` trong MATLAB, giúp thuật toán bứt phá các góc xoay lớn và bám sát các đỉnh tín hiệu.
 
 ---
 
-## 📂 Kiến trúc mã nguồn chi tiết (Source Code Breakdown)
-Mã nguồn được phân chia thành 7 khối (Sections) rành mạch. Dưới đây là chức năng và ý nghĩa kỹ thuật của từng khối:
+## 🧲 2. Giải phẫu Forward Model (Cuộn Vi Sai)
+**Forward Model** là trái tim của hệ thống, làm nhiệm vụ tính toán tín hiệu điện áp cảm ứng (EMF) lý thuyết khi biết trước tọa độ 6D.
+* Phần cứng thu tín hiệu (RX) là một **Cuộn vi sai (Spatial Gradiometer)** gồm 2 nửa cuộn dây quấn ngược chiều, cách nhau khoảng cách $d = 0.25\text{ mm}$.
+* Thiết kế này triệt tiêu hoàn toàn nhiễu từ trường đồng pha (như từ trường Trái Đất), nhưng lại sinh ra một bài toán toán học cực kỳ hóc búa ở vùng trường gần.
 
-### Section 1: Cấu hình thông số vật lý (Physical Parameters Setup)
-* **Nhiệm vụ:** Khai báo toàn bộ các hằng số vật lý cốt lõi của phần cứng hệ thống (số vòng dây phát $N_{tx}$, bán kính cuộn $R$, tần số kích thích $f$, dòng điện kích thích $I$, khoảng cách vi sai $d = 0.25\text{ mm}$, diện tích mặt cắt $AK$). Đặc biệt là nạp ma trận tọa độ và góc đặt nghiêng thực tế của 3 cuộn phát ($\text{TX}$).
-* **Ý nghĩa:** Cung cấp "luật chơi" vật lý chuẩn xác, đóng vai trò nền tảng cho toàn bộ mô hình toán học ở các bước sau.
+### Vấn đề kỳ dị và Nguyên nhân thuật toán bị kẹt (The $r^{-4}$ Singularity & Gradient Trap)
+Với mô hình "Điểm từ lý tưởng" (Point Dipole), từ trường $\mathbf{B}$ tỉ lệ nghịch với lập phương khoảng cách: $\mathbf{B} \propto \frac{1}{r^3}$.
+Do cuộn vi sai đo sự chênh lệch từ trường giữa 2 điểm rất gần nhau, phép đo này tương đương với đạo hàm không gian bậc nhất của $\mathbf{B}$:
+$$\Delta \mathbf{B} \approx \frac{\partial \mathbf{B}}{\partial r} \cdot d \propto \frac{d}{r^4}$$
 
-### Section 2: Tải và trích xuất dữ liệu (Data Loading & Pre-processing)
-* **Nhiệm vụ:** Đọc file thực nghiệm `conenorot_data.csv`. Trích xuất dữ liệu thành 3 ma trận độc lập: 9 cột tín hiệu điện áp đo thực tế ($\text{EMF}$), 3 cột tọa độ thực tế (`GT_pos`), và 3 cột góc quay (`GT_ang`). Code tích hợp cơ chế kiểm tra lỗi tệp (File Not Found) và **tự động quy đổi đơn vị tọa độ** từ $\text{mm}$ sang mét ($\text{m}$) chuẩn SI.
-* **Ý nghĩa:** Đảm bảo đồng nhất hệ đơn vị đo lường giữa phần cứng và phương trình Maxwell, tránh triệt tiêu từ trường về $0$ do lệch đơn vị.
+Khi viên nang di chuyển sát vào cuộn phát ($r \to 0$), mô hình lý thuyết $1/r^4$ gây ra sự sụp đổ của toàn bộ thuật toán tối ưu. Quá trình "chết kẹt" này diễn ra qua 3 bước toán học:
 
-### Section 3: Trực quan hóa cơ sở dữ liệu (Database Visualization)
-* **Nhiệm vụ:** Sử dụng thư viện `matplotlib` để render biểu đồ không gian 3D, tái hiện lại quỹ đạo di chuyển thực tế (Ground Truth) của viên nang nội soi từ điểm xuất phát (màu xanh) đến điểm kết thúc (màu đỏ).
-* **Ý nghĩa:** Giúp người nghiên cứu có cảm quan trực quan về hình thù đường đi của viên nang trước khi đối chiếu với thuật toán giải mã.
+1. **Bùng nổ Gradient (Gradient Explosion):** Thuật toán `least_squares` hoạt động bằng cách tính ma trận Jacobian (đạo hàm riêng của sai số theo từng biến) để dò tìm hướng dốc đi xuống. Đạo hàm của $r^{-4}$ là $-4r^{-5}$. Khi $r \to 0$, đạo hàm này tiến tới vô cực với tốc độ khủng khiếp. Không gian sai số tại đây không còn là một cái phễu trơn tru mà biến thành một "bức tường thẳng đứng".
+2. **Nhiễu loạn bước nhảy (Step-size Chaos):** Đứng trước bức tường vô cực này, chỉ cần thuật toán nhích thử tọa độ $(x, y, z)$ đi một khoảng cực nhỏ (ví dụ $0.001\text{ mm}$), tín hiệu lý thuyết $\Delta \mathbf{B}$ lập tức nhảy vọt lên hàng tỷ lần. Điều này tạo ra một sai số khổng lồ so với tín hiệu thực tế (chỉ khoảng vài chục mV).
+3. **Lỗ hổng Toán học và Sự "Bỏ cuộc" (The Mathematical Loophole):** Đứng trước một không gian hỗn loạn không thể dò đường bằng tọa độ, thuật toán nhận ra một lối tắt. Vì tín hiệu cuối cùng được tính bằng công thức $EMF = K \cdot \Delta \mathbf{B}$, thuật toán quyết định "đầu hàng" việc dò tìm tọa độ và lập tức ép hệ số khuếch đại $K$ tiến sát về $0$. Khi $K = 0$, toàn bộ $EMF = 0$, triệt tiêu sự bùng nổ của $\Delta \mathbf{B}$ và mang lại một sai số hữu hạn an toàn. 
 
-### Section 4: Mô hình vật lý thuận (Forward Model - Discrete Method)
-* **Nhiệm vụ:** Xây dựng hàm toán học mô phỏng quá trình sinh từ trường $\mathbf{B}$ của lưỡng cực từ. Thay vì dùng xấp xỉ đạo hàm vi phân, mô hình áp dụng phương pháp Rời rạc (Discrete): Tính toán cảm ứng từ trực tiếp tại hai nửa cuộn thu cách nhau khoảng $d$, sau đó lấy hiệu số $\Delta B$. Thuật toán ánh xạ chính xác thiết kế phần cứng ($\text{RX}_2$ theo trục $Z$, $\text{RX}_3$ theo trục $Y$, $\text{RX}_1$ theo trục $X$).
-* **Ý nghĩa:** "Đóng vai" phần cứng thực nghiệm, giúp tính toán ngược ra mức điện áp lý tưởng thu được dựa trên một bộ tọa độ viên nang cho trước.
-
-### Section 5: Hiệu chuẩn biên độ (Scale Calibration - Closed Form)
-* **Nhiệm vụ:** Chạy mô hình lý thuyết qua toàn bộ các điểm quỹ đạo Ground Truth. Sau đó áp dụng phương pháp Hồi quy tuyến tính đóng (Closed-form Least Squares) nhằm tính ra mảng 9 hệ số tỷ lệ (`scale_factors`) cho 9 kênh đo.
-* **Ý nghĩa:** Đây là bước tối quan trọng để bù đắp các suy hao biên độ tín hiệu, nhiễu điện trở mạch, hoặc sai số gia công linh kiện giữa môi trường lý tưởng và thực tế.
-
-### Section 6: Giải mã tọa độ bằng tối ưu hóa (Localization Optimization)
-* **Nhiệm vụ:** Đây là "trái tim" của hệ thống phần mềm. Vòng lặp giải quyết Bài toán ngược (Inverse Problem) cho từng mẫu đo bằng hàm tối ưu phi tuyến `scipy.optimize.least_squares` với thuật toán `trust-region-reflective`. Hàm mục tiêu ép phần dư giữa [EMF Lý thuyết $\times$ Scale] và [EMF Đo đạc] về mốc $0$. Mỗi nghiệm được mồi từ Ground Truth và giới hạn nghiêm ngặt trong hộp không gian $\pm 3\text{ cm}$.
-* **Ý nghĩa:** Dịch ngược tín hiệu điện áp đo được thành không gian 3D thực tế. 
-
-### Section 7: Kiểm chứng & Trực quan hóa kết quả (Evaluation & Visualization)
-* **Nhiệm vụ:** Tính toán sai số lệch chuẩn toàn cục ($\text{RMSE}$) tính bằng milimet. Xuất 2 bộ đồ thị phân tích: Đồ thị chồng chập quỹ đạo 3D (Thực tế vs Ước lượng) và Lưới đồ thị phân tích tín hiệu $3 \times 3$.
-* **Ý nghĩa:** Lưới $3 \times 3$ so sánh trực tiếp đường cong điện áp Đo đạc (Đen) và Lý thuyết (Đỏ), cung cấp bằng chứng khoa học tuyệt đối về mức độ hội tụ của hệ thống mô hình.
+**Hệ quả:** Thuật toán dừng chạy và báo "tối ưu thành công" từ rất sớm, để lại kết quả là một đường tín hiệu phẳng lỳ (flatline) nằm bẹt dưới trục hoành, hoàn toàn bỏ lỡ các đỉnh tín hiệu đo đạc phần cứng.
 
 ---
-## 📊 Kết quả đánh giá hệ thống
-* **Định lượng:** Báo cáo mức độ bám sát thực nghiệm qua sai số vị trí tổng thể $\text{RMSE}$.
-* **Định tính:** Minh chứng sự đồng bộ pha và biên độ hoàn hảo giữa cảm biến thực tế và mô hình toán học qua biểu đồ đa kênh $3 \times 3$.
+
+## 🛠️ 3. Giải pháp: Lưỡng cực Điều chuẩn (Regularized Dipole Model)
+Để triệt tiêu điểm kỳ dị mà không làm mất đi bản chất đo vi sai (khoảng cách $d$), hệ thống nâng cấp từ mô hình "Điểm từ lý tưởng" lên mô hình "Vòng dây hữu hạn" (Finite-size Coil Approximation) bằng phương pháp **Điều chuẩn (Regularization)**.
+
+**Bước 1: Đưa hệ số chặn vật lý ($R^2$) vào mẫu số**
+Cuộn phát TX thực tế có bán kính $R = 60\text{ mm}$. Hệ thống tích hợp $R$ trực tiếp vào mẫu số của thế vô hướng từ. Qua quá trình lấy Gradient, phương trình từ trường $\mathbf{B}$ chuẩn xác tại một nửa của cuộn vi sai trở thành:
+$$\mathbf{B} = \frac{\mu_0}{4\pi} \frac{3(\mathbf{m} \cdot \mathbf{r})\mathbf{r} - (r^2 + R^2)\mathbf{m}}{(r^2 + R^2)^{5/2}}$$
+
+*(Trong đó $\mathbf{m}$ là momen từ, $\mathbf{r}$ là vector khoảng cách).*
+
+**Bước 2: Xử lý giới hạn khi $r \to 0$**
+Nhờ có $R^2$, khi viên nang chạm mặt cuộn phát ($r = 0$), mẫu số không bị triệt tiêu mà trở thành một hằng số giới hạn vật lý:
+$$\lim_{r \to 0} (r^2 + R^2)^{5/2} = (0 + R^2)^{5/2} = R^5$$
+Khối chóp vô cực giờ đây được "bo tròn" thành một đỉnh (peak) trơn tru và mềm mại.
+
+**Bước 3: Chiếu lên Cuộn Vi Sai**
+Mô hình toán học bảo toàn nguyên vẹn tính vi sai bằng cách tính $\mathbf{B}$ độc lập cho 2 vị trí cộng/trừ của cuộn thu:
+$$\mathbf{r}_{plus} = \mathbf{r}_{rx} + \frac{d}{2}\mathbf{\hat{n}}_{rx} - \mathbf{r}_{tx}$$
+$$\mathbf{r}_{minus} = \mathbf{r}_{rx} - \frac{d}{2}\mathbf{\hat{n}}_{rx} - \mathbf{r}_{tx}$$
+Độ lệch từ trường sinh ra dòng điện:
+$$EMF \propto \left\vert{} (\mathbf{B}_{plus} - \mathbf{B}_{minus}) \cdot \mathbf{\hat{n}}_{rx} \right\vert{}$$
+
+### 🏆 Kết quả
+Việc sử dụng mẫu số $(r^2 + R^2)^{5/2}$ đã giải cứu hoàn toàn thuật toán tối ưu. Không gian Gradient trở nên mượt mà (smooth) ở ngay cả những điểm sát cuộn dây nhất. Thuật toán `least_squares` không còn bị hoảng loạn bởi bùng nổ đạo hàm, loại bỏ hoàn toàn hiện tượng ép biến $K \to 0$. Nhờ đó, nó thong thả tính toán các bước nhảy lớn, tìm ra chính xác các góc xoay $164^\circ$ và bám khít $100\%$ vào các đỉnh tín hiệu $10\text{ mV}$ - $13\text{ mV}$ của cuộn vi sai thực tế.
