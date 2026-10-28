@@ -105,3 +105,32 @@ $$EMF \propto \vert{}(\vec{B}_{plus} - \vec{B}_{minus}) \cdot \hat{n}_{rx}\vert{
 
 ### 🏆 Kết quả
 Việc sử dụng mẫu số $(r^2 + R^2)^{5/2}$ đã giải cứu hoàn toàn thuật toán tối ưu. Không gian Gradient trở nên mượt mà (smooth) ở ngay cả những điểm sát cuộn dây nhất. Thuật toán `least_squares` không còn bị hoảng loạn bởi việc chia cho số $0$, loại bỏ hoàn toàn hiện tượng ép biến $K \to 0$. Nhờ đó, nó thong thả tính toán các bước nhảy lớn, tìm ra chính xác các góc xoay **164°** và bám khít **100%** vào các đỉnh tín hiệu **10 mV - 13 mV** của cuộn vi sai thực tế.
+
+---
+
+## 📊 4. Cấu Trúc Dữ Liệu Đầu Vào (Dataset Structure)
+
+Tập dữ liệu đo đạc (file CSV/Excel) bao gồm **15 cột** được sắp xếp theo chuẩn thứ tự ưu tiên cuộn phát (TX-major order) đối với nhóm tín hiệu EMF và quy chuẩn tọa độ Ground Truth 6-DOF:
+
+| Cột (Excel) | Tên Biến trong CSV | Ý Nghĩa Kỹ Thuật | Đơn Vị |
+| :---: | :--- | :--- | :---: |
+| **A (1)** | `Rx1 by Tx1` | Suất điện động thu trên $\text{RX}_1$ do cuộn phát $\text{TX}_1$ sinh ra | mV / V |
+| **B (2)** | `Rx2 by Tx1` | Suất điện động thu trên $\text{RX}_2$ do cuộn phát $\text{TX}_1$ sinh ra | mV / V |
+| **C (3)** | `Rx3 by Tx1` | Suất điện động thu trên $\text{RX}_3$ do cuộn phát $\text{TX}_1$ sinh ra | mV / V |
+| **D (4)** | `Rx1 by Tx2` | Suất điện động thu trên $\text{RX}_1$ do cuộn phát $\text{TX}_2$ sinh ra | mV / V |
+| **E (5)** | `Rx2 by Tx2` | Suất điện động thu trên $\text{RX}_2$ do cuộn phát $\text{TX}_2$ sinh ra | mV / V |
+| **F (6)** | `Rx3 by Tx2` | Suất điện động thu trên $\text{RX}_3$ do cuộn phát $\text{TX}_2$ sinh ra | mV / V |
+| **G (7)** | `Rx1 by Tx3` | Suất điện động thu trên $\text{RX}_1$ do cuộn phát $\text{TX}_3$ sinh ra | mV / V |
+| **H (8)** | `Rx2 by Tx3` | Suất điện động thu trên $\text{RX}_2$ do cuộn phát $\text{TX}_3$ sinh ra | mV / V |
+| **I (9)** | `Rx3 by Tx3` | Suất điện động thu trên $\text{RX}_3$ do cuộn phát $\text{TX}_3$ sinh ra | mV / V |
+| **J (10)** | `x` | Tọa độ Ground Truth vị trí $X$ của viên nang | mm |
+| **K (11)** | `y` | Tọa độ Ground Truth vị trí $Y$ của viên nang | mm |
+| **L (12)** | `z` | Tọa độ Ground Truth vị trí $Z$ của viên nang | mm |
+| **M (13)** | `roll` | Góc xoay Ground Truth quanh trục $X$ | degree (độ) |
+| **N (14)** | `pitch` | Góc xoay Ground Truth quanh trục $Y$ | degree (độ) |
+| **O (15)** | `yaw` | Góc xoay Ground Truth quanh trục $Z$ | degree (độ) |
+
+> ⚠️ **Lưu ý xử lý dữ liệu khi nạp vào Python:**  
+> - **Tín hiệu EMF (Cột 0 đến 8):** Trích xuất bằng `data[:, 0:9]`.  
+> - **Tọa độ thực tế (Cột 9 đến 11):** Bắt buộc chia cho $1000.0$ để quy đổi từ **mm** sang **m** (`data[:, 9:12] / 1000.0`) nhằm tương thích với đơn vị của mô hình vật lý.  
+> - **Góc xoay thực tế (Cột 12 đến 14):** Giữ nguyên đơn vị **độ (deg)** (`data[:, 12:15]`).
