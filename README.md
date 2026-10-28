@@ -10,21 +10,55 @@ Hệ thống giải quyết bài toán định vị 6 bậc tự do (6-DOF) thô
 1. **Auto-Calibration (Hiệu chuẩn hệ thống):** Tối ưu hóa tọa độ thực tế của 3 cuộn phát (TX) và hệ số khuếch đại điện áp ($K$) dựa trên các điểm mồi (Initial Guesses).
 2. **Inverse Kinematics (Động học ngược):** Sử dụng thông số TX và $K$ đã hiệu chuẩn để dò tìm ngược lại quỹ đạo 6D $[x, y, z, roll, pitch, yaw]$ của viên nang theo từng khung hình.
 
-**Cốt lõi Toán học:** 
+**Cốt lõi Toán học:**  
 Cả hai giai đoạn đều được giải quyết bằng thuật toán **Non-linear Least Squares (Bình phương tối thiểu phi tuyến)** thông qua hàm `scipy.optimize.least_squares` với phương pháp **Trust Region Reflective (TRF)**.
 
-**💡 Chìa khóa hội tụ (Jacobian Scaling):** 
+**💡 Chìa khóa hội tụ (Jacobian Scaling):**  
 Không gian trạng thái chứa các biến có tỷ lệ chênh lệch khổng lồ: Tọa độ (~ 0.5 m), Góc quay (~ 180°) và Hệ số $K$ (~ 0.001). Để tránh "Bẫy Gradient" (thuật toán kẹt ở cực tiểu cục bộ do đạo hàm của $K$ quá nhỏ), hệ thống kích hoạt cơ chế `x_scale='jac'`. Tính năng này buộc Python tự động co giãn ma trận Jacobian, mô phỏng lại sự thông minh của hàm `lsqnonlin` trong MATLAB, giúp thuật toán bứt phá các góc xoay lớn và bám sát các đỉnh tín hiệu.
 
 ---
 
-## 🧲 2. Giải phẫu Forward Model (Cuộn Vi Sai)
+## 🧲 2. Giải phẫu Forward Model & Thông Số Phần Cứng
 
 **Forward Model** là trái tim của hệ thống, làm nhiệm vụ tính toán tín hiệu điện áp cảm ứng (EMF) lý thuyết khi biết trước tọa độ 6D.
-* Phần cứng thu tín hiệu (RX) là một **Cuộn vi sai (Spatial Gradiometer)** gồm 2 nửa cuộn dây quấn ngược chiều, cách nhau khoảng cách **d = 0.25 mm**.
-* Thiết kế này triệt tiêu hoàn toàn nhiễu từ trường đồng pha (như từ trường Trái Đất), nhưng lại sinh ra một bài toán toán học cực kỳ hóc búa ở vùng trường gần.
+
+### 📌 Thông số phần cứng & Trục hướng ban đầu
+
+#### 1. Hệ thống cuộn phát (Transmitter - TX)
+Hệ thống gồm 3 cuộn phát cố định đặt tại khung Ground Truth (GT):
+* **Số vòng dây ($N_{tx}$):** $300$ vòng.
+* **Bán kính cuộn phát ($R_{tx}$):** $0.06\text{ m}$ ($60\text{ mm}$).
+* **Cường độ dòng điện ($I$):** $1.0\text{ A}$ cho cả 3 cuộn TX ($I = [1.0, 1.0, 1.0]\text{ A}$).
+* **Tần số phát ($f$):** $f_1 = 5053\text{ Hz}$, $f_2 = 6911\text{ Hz}$, $f_3 = 5932\text{ Hz}$.
+* **Trục hướng ban đầu (Local Axis):** Vector pháp tuyến ban đầu của cuộn TX khi chưa xoay luôn chỉ theo trục $+Z$ địa phương: $\hat{n}_{tx,0} = [0, 0, 1]^T$. Vector momen từ $\vec{m}$ được xoay qua ma trận Z-Y-X từ góc mồi $[roll, pitch, yaw]$.
+* **Tọa độ & Góc mồi ban đầu ($TX_{positions}$):**
+  * **TX1:** $[x, y, z] = [0.35146, 0.61931, 0.03000]\text{ m}$; $[roll, pitch, yaw] = [15^\circ, 0^\circ, 0^\circ]$
+  * **TX2:** $[x, y, z] = [0.42173, 0.51066, 0.03000]\text{ m}$; $[roll, pitch, yaw] = [0^\circ, -15^\circ, -30^\circ]$
+  * **TX3:** $[x, y, z] = [0.29150, 0.50279, 0.03000]\text{ m}$; $[roll, pitch, yaw] = [0^\circ, 15^\circ, 30^\circ]$
+
+#### 2. Hệ thống cuộn thu trong viên nang (Capsule Receiver - RX)
+Bộ thu gồm 3 trục cuộn thu đặt vuông góc nhau nằm trong khung vỏ viên nang:
+* **Số vòng dây mỗi nửa cuộn ($N_{rx}$):** $100$ vòng.
+* **Hằng số từ thẩm chân không ($\mu_0$):** $4\pi \times 10^{-7}\text{ H/m}$.
+* **Diện tích hiệu dụng 3 trục ($AK$):**
+  * **$\text{RX}_1$:** $\pi \times (2.0 \times 10^{-3})^2 \approx 12.57 \times 10^{-6}\text{ m}^2$
+  * **$\text{RX}_2$:** $6.79 \times 4.00 \times 10^{-6} = 27.16 \times 10^{-6}\text{ m}^2$
+  * **$\text{RX}_3$:** $6.00 \times 6.87 \times 10^{-6} = 41.22 \times 10^{-6}\text{ m}^2$
+* **Khoảng cách vi sai / Baseline ($d_{diff}$):**
+  * **$\text{RX}_1$:** $1.84\text{ mm}$ ($1.84 \times 10^{-3}\text{ m}$) — Chế độ: `'center'` (Điểm tâm)
+  * **$\text{RX}_2$:** $1.58\text{ mm}$ ($1.58 \times 10^{-3}\text{ m}$) — Chế độ: `'diff'` (Vi sai 2 điểm)
+  * **$\text{RX}_3$:** $1.50\text{ mm}$ ($1.50 \times 10^{-3}\text{ m}$) — Chế độ: `'center'` (Điểm tâm)
+* **Trục hướng ban đầu trong khung viên nang (Local RX Axes):**
+  Quy ước hướng vector đơn vị của 3 cuộn thu so với ma trận xoay của viên nang $R_{CE}$:
+  * **$\text{RX}_1$ (Trục X):** $\hat{n}_{rx1,0} = [1, 0, 0]^T$
+  * **$\text{RX}_2$ (Trục Z):** $\hat{n}_{rx2,0} = [0, 0, 1]^T$
+  * **$\text{RX}_3$ (Trục Y):** $\hat{n}_{rx3,0} = [0, 1, 0]^T$
+
+---
 
 ### Vấn đề kỳ dị và Nguyên nhân thuật toán bị kẹt (The Singularity & Gradient Trap)
+
+Phần cứng thu tín hiệu cuộn vi sai (**Spatial Gradiometer**) gồm 2 nửa cuộn dây quấn ngược chiều, cách nhau khoảng cách $d$. Thiết kế này triệt tiêu hoàn toàn nhiễu từ trường đồng pha (như từ trường Trái Đất), nhưng lại sinh ra một bài toán toán học cực kỳ hóc búa ở vùng trường gần.
 
 Trong mô hình "Điểm từ lý tưởng" (Point Dipole) cổ điển, phương trình từ trường $\vec{B}$ sinh ra bởi cuộn phát được xác định bằng công thức chính xác:
 
@@ -46,19 +80,19 @@ Khi viên nang di chuyển sát vào cuộn phát ($r \to 0$), mô hình lý thu
 
 Để triệt tiêu lỗi chia cho $0$ mà không làm mất đi bản chất đo vi sai (khoảng cách $d$), hệ thống nâng cấp từ mô hình "Điểm từ lý tưởng" lên mô hình "Vòng dây hữu hạn" (Finite-size Coil Approximation) bằng phương pháp **Điều chuẩn (Regularization)**.
 
-**Bước 1: Đưa hệ số chặn vật lý ($R^2$) vào mẫu số**
+**Bước 1: Đưa hệ số chặn vật lý ($R^2$) vào mẫu số**  
 Cuộn phát TX thực tế có bán kính **R = 60 mm**. Bằng cách tính toán từ trường cho một vòng dây có kích thước thực, bình phương bán kính $R^2$ được cộng trực tiếp vào cấu trúc mẫu số. Phương trình từ trường $\vec{B}$ chuẩn xác tại một nửa của cuộn vi sai trở thành:
 
 $$\vec{B} = \frac{\mu_0}{4\pi} \frac{3(\vec{m} \cdot \vec{r})\vec{r} - (r^2 + R^2)\vec{m}}{(r^2 + R^2)^{5/2}}$$
 
-**Bước 2: Xử lý giới hạn khi $r \to 0$**
+**Bước 2: Xử lý giới hạn khi $r \to 0$**  
 Nhờ sự xuất hiện của $R^2$, khi viên nang chạm mặt cuộn phát ($r = 0$), mẫu số không còn bị triệt tiêu về $0$ mà trở thành một hằng số giới hạn vật lý:
 
 $$\lim_{r \to 0} (r^2 + R^2)^{5/2} = (0 + R^2)^{5/2} = R^5$$
 
 Vì **R = 0.06 m** > 0, mẫu số luôn là một giá trị dương hữu hạn ($0.06^5 \approx 7.7 \times 10^{-7}$). Khối chóp vô cực của không gian sai số giờ đây được "bo tròn" thành một đỉnh (peak) trơn tru và an toàn.
 
-**Bước 3: Chiếu lên Cuộn Vi Sai**
+**Bước 3: Chiếu lên Cuộn Vi Sai**  
 Mô hình toán học bảo toàn nguyên vẹn tính vi sai bằng cách tính $\vec{B}$ độc lập cho 2 vị trí cộng/trừ của cuộn thu (với $\hat{n}_{rx}$ là vector đơn vị chỉ hướng trục cuộn thu):
 
 $$\vec{r}_{plus} = \vec{r}_{rx} + \frac{d}{2}\hat{n}_{rx} - \vec{r}_{tx}$$
