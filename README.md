@@ -115,13 +115,13 @@ Tập dữ liệu đo đạc (file CSV/Excel) bao gồm **15 cột** được s�
 | Cột (Excel) | Tên Biến trong CSV | Ý Nghĩa Kỹ Thuật | Đơn Vị |
 | :---: | :--- | :--- | :---: |
 | **A (1)** | `Rx1 by Tx1` | Suất điện động thu trên $\text{RX}_1$ do cuộn phát $\text{TX}_1$ sinh ra | mV / V |
-| **B (2)** | `Rx2 by Tx1` | Suất điện động thu trên $\text{RX}_2$ do cuộn phát $\text{TX}_1$ sinh ra | mV / V |
-| **C (3)** | `Rx3 by Tx1` | Suất điện động thu trên $\text{RX}_3$ do cuộn phát $\text{TX}_1$ sinh ra | mV / V |
-| **D (4)** | `Rx1 by Tx2` | Suất điện động thu trên $\text{RX}_1$ do cuộn phát $\text{TX}_2$ sinh ra | mV / V |
+| **B (2)** | `Rx1 by Tx2` | Suất điện động thu trên $\text{RX}_2$ do cuộn phát $\text{TX}_1$ sinh ra | mV / V |
+| **C (3)** | `Rx1 by Tx3` | Suất điện động thu trên $\text{RX}_3$ do cuộn phát $\text{TX}_1$ sinh ra | mV / V |
+| **D (4)** | `Rx2 by Tx1` | Suất điện động thu trên $\text{RX}_1$ do cuộn phát $\text{TX}_2$ sinh ra | mV / V |
 | **E (5)** | `Rx2 by Tx2` | Suất điện động thu trên $\text{RX}_2$ do cuộn phát $\text{TX}_2$ sinh ra | mV / V |
-| **F (6)** | `Rx3 by Tx2` | Suất điện động thu trên $\text{RX}_3$ do cuộn phát $\text{TX}_2$ sinh ra | mV / V |
-| **G (7)** | `Rx1 by Tx3` | Suất điện động thu trên $\text{RX}_1$ do cuộn phát $\text{TX}_3$ sinh ra | mV / V |
-| **H (8)** | `Rx2 by Tx3` | Suất điện động thu trên $\text{RX}_2$ do cuộn phát $\text{TX}_3$ sinh ra | mV / V |
+| **F (6)** | `Rx2 by Tx3` | Suất điện động thu trên $\text{RX}_3$ do cuộn phát $\text{TX}_2$ sinh ra | mV / V |
+| **G (7)** | `Rx3 by Tx1` | Suất điện động thu trên $\text{RX}_1$ do cuộn phát $\text{TX}_3$ sinh ra | mV / V |
+| **H (8)** | `Rx3 by Tx2` | Suất điện động thu trên $\text{RX}_2$ do cuộn phát $\text{TX}_3$ sinh ra | mV / V |
 | **I (9)** | `Rx3 by Tx3` | Suất điện động thu trên $\text{RX}_3$ do cuộn phát $\text{TX}_3$ sinh ra | mV / V |
 | **J (10)** | `x` | Tọa độ Ground Truth vị trí $X$ của viên nang | mm |
 | **K (11)** | `y` | Tọa độ Ground Truth vị trí $Y$ của viên nang | mm |
