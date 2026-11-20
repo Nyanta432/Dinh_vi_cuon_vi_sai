@@ -1,136 +1,111 @@
-# 🧲 Lõi Thuật Toán & Mô Hình Vật Lý: Hệ Thống Định Vị Từ Trường 6-DOF
+# Dữ liệu đo EMF – định vị viên nang nội soi bằng cảm biến từ
 
-Tài liệu này đi sâu vào giải phẫu **Mô hình Toán học (Forward Model)** và **Thuật toán Tối ưu hóa (Optimization Algorithm)** được sử dụng trong dự án. Điểm nhấn lớn nhất của hệ thống là phương pháp xử lý triệt để điểm kỳ dị (Singularity) sinh ra từ cảm biến cuộn vi sai (Differential Coil) tại vùng trường gần (Near-field).
+File dữ liệu: `conenorot_c_223_data.csv`
 
----
+Dữ liệu đo EMF của 3 cuộn thu (RX) trong viên nang, khi 3 cuộn phát (TX) cố định phát ở 3 tần số khác nhau. Kèm theo là vị trí và góc Euler của viên nang do hệ Ground Truth (GT) ghi lại tại cùng thời điểm.
 
-## ⚙️ 1. Cấu trúc Thuật toán (The Algorithm)
+## 1. Cấu trúc file
 
-Hệ thống giải quyết bài toán định vị 6 bậc tự do (6-DOF) thông qua quy trình 2 giai đoạn khép kín (End-to-End):
-1. **Auto-Calibration (Hiệu chuẩn hệ thống):** Tối ưu hóa tọa độ thực tế của 3 cuộn phát (TX) và hệ số khuếch đại điện áp ($K$) dựa trên các điểm mồi (Initial Guesses).
-2. **Inverse Kinematics (Động học ngược):** Sử dụng thông số TX và $K$ đã hiệu chuẩn để dò tìm ngược lại quỹ đạo 6D $[x, y, z, roll, pitch, yaw]$ của viên nang theo từng khung hình.
+- Định dạng: CSV, **không có dòng tiêu đề**, ngăn cách bằng dấu phẩy.
+- Kích thước: **3000 dòng × 15 cột**, không có giá trị thiếu.
+- Mỗi dòng là một lần đo.
 
-**Cốt lõi Toán học:**  
-Cả hai giai đoạn đều được giải quyết bằng thuật toán **Non-linear Least Squares (Bình phương tối thiểu phi tuyến)** thông qua hàm `scipy.optimize.least_squares` với phương pháp **Trust Region Reflective (TRF)**.
+### Bảng các cột (đánh số từ 0)
 
-**💡 Chìa khóa hội tụ (Jacobian Scaling):**  
-Không gian trạng thái chứa các biến có tỷ lệ chênh lệch khổng lồ: Tọa độ (~ 0.5 m), Góc quay (~ 180°) và Hệ số $K$ (~ 0.001). Để tránh "Bẫy Gradient" (thuật toán kẹt ở cực tiểu cục bộ do đạo hàm của $K$ quá nhỏ), hệ thống kích hoạt cơ chế `x_scale='jac'`. Tính năng này buộc Python tự động co giãn ma trận Jacobian, mô phỏng lại sự thông minh của hàm `lsqnonlin` trong MATLAB, giúp thuật toán bứt phá các góc xoay lớn và bám sát các đỉnh tín hiệu.
+| Cột | Ký hiệu | Ý nghĩa | Đơn vị |
+|---|---|---|---|
+| 0 | TX1–RX1 | EMF cuộn thu RX1 khi TX1 phát (5053 Hz) | V |
+| 1 | TX2–RX1 | EMF cuộn thu RX1 khi TX2 phát (6911 Hz) | V |
+| 2 | TX3–RX1 | EMF cuộn thu RX1 khi TX3 phát (5932 Hz) | V |
+| 3 | TX1–RX2 | EMF cuộn thu RX2 khi TX1 phát | V |
+| 4 | TX2–RX2 | EMF cuộn thu RX2 khi TX2 phát | V |
+| 5 | TX3–RX2 | EMF cuộn thu RX2 khi TX3 phát | V |
+| 6 | TX1–RX3 | EMF cuộn thu RX3 khi TX1 phát | V |
+| 7 | TX2–RX3 | EMF cuộn thu RX3 khi TX2 phát | V |
+| 8 | TX3–RX3 | EMF cuộn thu RX3 khi TX3 phát | V |
+| 9 | x | Vị trí viên nang theo trục x (GT) | mm |
+| 10 | y | Vị trí viên nang theo trục y (GT) | mm |
+| 11 | z | Vị trí viên nang theo trục z (GT) | mm |
+| 12 | roll | **Góc Euler ban đầu của robot** quanh trục x | độ |
+| 13 | pitch | **Góc Euler ban đầu của robot** quanh trục y | độ |
+| 14 | yaw | **Góc Euler ban đầu của robot** quanh trục z | độ |
 
----
+Quy tắc chỉ số cột EMF: **`cột = (số TX − 1) + 3 × (số RX − 1)`**.
+Ví dụ: TX2–RX3 → `(2−1) + 3×(3−1) = 7`.
 
-## 🧲 2. Giải phẫu Forward Model & Thông Số Phần Cứng
+### Lưu ý về 3 cột cuối (góc Euler)
 
-**Forward Model** là trái tim của hệ thống, làm nhiệm vụ tính toán tín hiệu điện áp cảm ứng (EMF) lý thuyết khi biết trước tọa độ 6D.
+- Cột 12, 13, 14 là **góc Euler ban đầu của robot** (roll, pitch, yaw), không phải góc viên nang thay đổi trong lúc đo.
+- Trong file này robot **không xoay** khi di chuyển. Ba giá trị gần như không đổi trên toàn bộ file, khoảng (175.82°, −0.79°, 33.15°). Sai khác nhỏ giữa các dòng (vài phần trăm độ) là độ phân giải của hệ GT.
+- Vì góc ban đầu khác 0, **không nên trừ góc của mẫu đầu** khi xử lý, nếu không sẽ mất thông tin hướng của viên nang.
+- Thứ tự phép xoay dùng trong code: `R = Rz(yaw) · Ry(pitch) · Rx(roll)`.
 
-### 📌 Thông số phần cứng & Trục hướng ban đầu
+## 2. Quy ước đo: mỗi vị trí đo 10 lần
 
-#### 1. Hệ thống cuộn phát (Transmitter - TX)
-Hệ thống gồm 3 cuộn phát cố định đặt tại khung Ground Truth (GT):
-* **Số vòng dây ($N_{tx}$):** $300$ vòng.
-* **Bán kính cuộn phát ($R_{tx}$):** $0.06\text{ m}$ ($60\text{ mm}$).
-* **Cường độ dòng điện ($I$):** $1.0\text{ A}$ cho cả 3 cuộn TX ($I = [1.0, 1.0, 1.0]\text{ A}$).
-* **Tần số phát ($f$):** $f_1 = 5053\text{ Hz}$, $f_2 = 6911\text{ Hz}$, $f_3 = 5932\text{ Hz}$.
-* **Trục hướng ban đầu (Local Axis):** Vector pháp tuyến ban đầu của cuộn TX khi chưa xoay luôn chỉ theo trục $+Z$ địa phương: $\hat{n}_{tx,0} = [0, 0, 1]^T$. Vector momen từ $\vec{m}$ được xoay qua ma trận Z-Y-X từ góc mồi $[roll, pitch, yaw]$.
-* **Tọa độ & Góc mồi ban đầu ($TX_{positions}$):**
-  * **TX1:** $[x, y, z] = [0.35146, 0.61931, 0.03000]\text{ m}$; $[roll, pitch, yaw] = [15^\circ, 0^\circ, 0^\circ]$
-  * **TX2:** $[x, y, z] = [0.42173, 0.51066, 0.03000]\text{ m}$; $[roll, pitch, yaw] = [0^\circ, -15^\circ, -30^\circ]$
-  * **TX3:** $[x, y, z] = [0.29150, 0.50279, 0.03000]\text{ m}$; $[roll, pitch, yaw] = [0^\circ, 15^\circ, 30^\circ]$
+Tại mỗi vị trí, viên nang đứng yên và EMF được đo **10 lần liên tiếp** để giảm nhiễu. Vì vậy:
 
-#### 2. Hệ thống cuộn thu trong viên nang (Capsule Receiver - RX)
-Bộ thu gồm 3 trục cuộn thu đặt vuông góc nhau nằm trong khung vỏ viên nang:
-* **Số vòng dây mỗi nửa cuộn ($N_{rx}$):** $100$ vòng.
-* **Hằng số từ thẩm chân không ($\mu_0$):** $4\pi \times 10^{-7}\text{ H/m}$.
-* **Diện tích hiệu dụng 3 trục ($AK$):**
-  * **$\text{RX}_1$:** $\pi \times (2.0 \times 10^{-3})^2 \approx 12.57 \times 10^{-6}\text{ m}^2$
-  * **$\text{RX}_2$:** $6.79 \times 4.00 \times 10^{-6} = 27.16 \times 10^{-6}\text{ m}^2$
-  * **$\text{RX}_3$:** $6.00 \times 6.87 \times 10^{-6} = 41.22 \times 10^{-6}\text{ m}^2$
-* **Khoảng cách vi sai / Baseline ($d_{diff}$):**
-  * **$\text{RX}_1$:** $1.84\text{ mm}$ ($1.84 \times 10^{-3}\text{ m}$) — Chế độ: `'center'` (Điểm tâm)
-  * **$\text{RX}_2$:** $1.58\text{ mm}$ ($1.58 \times 10^{-3}\text{ m}$) — Chế độ: `'diff'` (Vi sai 2 điểm)
-  * **$\text{RX}_3$:** $1.50\text{ mm}$ ($1.50 \times 10^{-3}\text{ m}$) — Chế độ: `'center'` (Điểm tâm)
-* **Trục hướng ban đầu trong khung viên nang (Local RX Axes):**
-  Quy ước hướng vector đơn vị của 3 cuộn thu so với ma trận xoay của viên nang $R_{CE}$:
-  * **$\text{RX}_1$ (Trục X):** $\hat{n}_{rx1,0} = [1, 0, 0]^T$
-  * **$\text{RX}_2$ (Trục Z):** $\hat{n}_{rx2,0} = [0, 0, 1]^T$
-  * **$\text{RX}_3$ (Trục Y):** $\hat{n}_{rx3,0} = [0, 1, 0]^T$
+- Cứ **10 dòng liên tiếp** là cùng một vị trí. Dòng 0–9 là vị trí 1, dòng 10–19 là vị trí 2, và cứ thế tiếp tục.
+- Trong mỗi nhóm 10 dòng, các cột 9–14 (vị trí và góc) **giống hệt nhau**. Chỉ 9 cột EMF (cột 0–8) khác nhau chút ít giữa các lần đo.
+- Tổng cộng: **300 vị trí × 10 lần đo = 3000 dòng**.
+- Quỹ đạo theo thứ tự đo: x từ khoảng −140 đến −44 mm, y từ khoảng 334 đến 426 mm, z từ khoảng 147 đến 246 mm.
 
----
+```
+dòng  0..9    → vị trí 1   (10 lần đo)
+dòng 10..19   → vị trí 2   (10 lần đo)
+...
+dòng 2990..2999 → vị trí 300 (10 lần đo)
+```
 
-### Vấn đề kỳ dị và Nguyên nhân thuật toán bị kẹt (The Singularity & Gradient Trap)
+## 3. Hệ trục thiết bị
 
-Phần cứng thu tín hiệu cuộn vi sai (**Spatial Gradiometer**) gồm 2 nửa cuộn dây quấn ngược chiều, cách nhau khoảng cách $d$. Thiết kế này triệt tiêu hoàn toàn nhiễu từ trường đồng pha (như từ trường Trái Đất), nhưng lại sinh ra một bài toán toán học cực kỳ hóc búa ở vùng trường gần.
+| Cuộn thu | Hướng trục trong viên nang |
+|---|---|
+| RX1 | y |
+| RX2 | z |
+| RX3 | x |
 
-Trong mô hình "Điểm từ lý tưởng" (Point Dipole) cổ điển, phương trình từ trường $\vec{B}$ sinh ra bởi cuộn phát được xác định bằng công thức chính xác:
+Cuộn TX: 3 cuộn cố định, tần số TX1 = 5053 Hz, TX2 = 6911 Hz, TX3 = 5932 Hz.
 
-$$\vec{B} = \frac{\mu_0}{4\pi} \frac{3(\vec{m} \cdot \vec{r})\vec{r} - r^2\vec{m}}{r^5}$$
+## 4. Cách đọc dữ liệu và lấy trung bình 10 lần đo
 
-(Trong đó: $\vec{m}$ là vector momen từ, $\vec{r}$ là vector khoảng cách, và $r = \vert{}\vec{r}\vert{}$ là độ lớn khoảng cách).
+```python
+import numpy as np
+import pandas as pd
 
-Khi viên nang di chuyển sát vào cuộn phát ($r \to 0$), mô hình lý thuyết $1/r^4$ gây ra sự sụp đổ của toàn bộ thuật toán tối ưu. Quá trình "chết kẹt" này diễn ra qua 3 bước toán học:
+N_REP = 10  # số lần đo tại mỗi vị trí
 
-1. **Bùng nổ Gradient (Gradient Explosion):** Thuật toán `least_squares` hoạt động bằng cách tính ma trận Jacobian (đạo hàm riêng của sai số theo từng biến) để dò tìm hướng dốc đi xuống. Đạo hàm của $r^{-4}$ là $-4r^{-5}$. Khi $r \to 0$, đạo hàm này tiến tới vô cực với tốc độ khủng khiếp. Không gian sai số tại đây không còn là một cái phễu trơn tru mà biến thành một "bức tường thẳng đứng".
-2. **Nhiễu loạn bước nhảy (Step-size Chaos):** Đứng trước bức tường vô cực này, chỉ cần thuật toán nhích thử tọa độ $(x, y, z)$ đi một khoảng cực nhỏ (ví dụ **0.001 mm**), tín hiệu lý thuyết $\Delta\vec{B}$ lập tức nhảy vọt lên hàng tỷ lần. Điều này tạo ra một sai số khổng lồ so với tín hiệu thực tế (chỉ khoảng vài chục mV).
-3. **Lỗ hổng Toán học và Sự "Bỏ cuộc" (The Mathematical Loophole):** Đứng trước một không gian hỗn loạn không thể dò đường bằng tọa độ, thuật toán nhận ra một lối tắt. Vì tín hiệu cuối cùng được tính bằng công thức $EMF = K \cdot \Delta\vec{B}$, thuật toán quyết định "đầu hàng" việc dò tìm tọa độ và lập tức ép hệ số khuếch đại $K$ tiến sát về $0$. Khi $K = 0$, toàn bộ $EMF = 0$, triệt tiêu sự bùng nổ của $\Delta\vec{B}$ và mang lại một sai số hữu hạn an toàn. 
+raw = pd.read_csv('conenorot_c_223_data.csv', header=None).values   # (3000, 15)
+assert raw.shape[0] % N_REP == 0
 
-**Hệ quả:** Thuật toán dừng chạy và báo "tối ưu thành công" từ rất sớm, để lại kết quả là một đường tín hiệu phẳng lỳ (flatline) nằm bẹt dưới trục hoành, hoàn toàn bỏ lỡ các đỉnh tín hiệu đo đạc phần cứng.
+# Tách theo nhóm: (300 vị trí, 10 lần đo, 15 cột)
+groups = raw.reshape(-1, N_REP, raw.shape[1])
 
----
+# Trung bình 10 lần đo -> 300 mẫu
+data = groups.mean(axis=1)               # (300, 15)
 
-## 🛠️ 3. Giải pháp: Lưỡng cực Điều chuẩn (Regularized Dipole Model)
+emf = data[:, 0:9]                       # 9 kênh EMF
+pos_mm = data[:, 9:12]                   # x, y, z (mm)
+euler_deg = data[:, 12:15]               # roll, pitch, yaw ban đầu (độ)
 
-Để triệt tiêu lỗi chia cho $0$ mà không làm mất đi bản chất đo vi sai (khoảng cách $d$), hệ thống nâng cấp từ mô hình "Điểm từ lý tưởng" lên mô hình "Vòng dây hữu hạn" (Finite-size Coil Approximation) bằng phương pháp **Điều chuẩn (Regularization)**.
+# Độ lệch chuẩn giữa 10 lần đo (đánh giá nhiễu)
+emf_std = groups[:, :, 0:9].std(axis=1)  # (300, 9)
 
-**Bước 1: Đưa hệ số chặn vật lý ($R^2$) vào mẫu số**  
-Cuộn phát TX thực tế có bán kính **R = 60 mm**. Bằng cách tính toán từ trường cho một vòng dây có kích thước thực, bình phương bán kính $R^2$ được cộng trực tiếp vào cấu trúc mẫu số. Phương trình từ trường $\vec{B}$ chuẩn xác tại một nửa của cuộn vi sai trở thành:
+# Lấy EMF của TX2–RX3 (cột 7)
+tx, rx = 2, 3
+col = (tx - 1) + 3 * (rx - 1)
+emf_tx2_rx3 = emf[:, col]
+```
 
-$$\vec{B} = \frac{\mu_0}{4\pi} \frac{3(\vec{m} \cdot \vec{r})\vec{r} - (r^2 + R^2)\vec{m}}{(r^2 + R^2)^{5/2}}$$
+Nếu muốn dùng riêng từng lần đo (ví dụ để phân tích nhiễu), dùng `groups[:, k, :]` với `k = 0..9`.
 
-**Bước 2: Xử lý giới hạn khi $r \to 0$**  
-Nhờ sự xuất hiện của $R^2$, khi viên nang chạm mặt cuộn phát ($r = 0$), mẫu số không còn bị triệt tiêu về $0$ mà trở thành một hằng số giới hạn vật lý:
+## 5. Chất lượng dữ liệu (kiểm tra trên file này)
 
-$$\lim_{r \to 0} (r^2 + R^2)^{5/2} = (0 + R^2)^{5/2} = R^5$$
+- Độ lệch chuẩn EMF giữa 10 lần đo tại cùng vị trí: khoảng 0.01 V, rất nhỏ so với EMF trung bình (khoảng 0.2 đến 2.3 V).
+- Không thấy trôi hệ thống theo thứ tự lần đo trong mỗi nhóm (lần đo thứ 1 đến 10 có trung bình gần như bằng nhau).
+- Khoảng giá trị EMF trong file: từ 0.001 đến 12.9 V.
 
-Vì **R = 0.06 m** > 0, mẫu số luôn là một giá trị dương hữu hạn ($0.06^5 \approx 7.7 \times 10^{-7}$). Khối chóp vô cực của không gian sai số giờ đây được "bo tròn" thành một đỉnh (peak) trơn tru và an toàn.
+## 6. Lưu ý khi sử dụng
 
-**Bước 3: Chiếu lên Cuộn Vi Sai**  
-Mô hình toán học bảo toàn nguyên vẹn tính vi sai bằng cách tính $\vec{B}$ độc lập cho 2 vị trí cộng/trừ của cuộn thu (với $\hat{n}_{rx}$ là vector đơn vị chỉ hướng trục cuộn thu):
-
-$$\vec{r}_{plus} = \vec{r}_{rx} + \frac{d}{2}\hat{n}_{rx} - \vec{r}_{tx}$$
-
-$$\vec{r}_{minus} = \vec{r}_{rx} - \frac{d}{2}\hat{n}_{rx} - \vec{r}_{tx}$$
-
-Độ lệch từ trường sinh ra dòng điện:
-
-$$EMF \propto \vert{}(\vec{B}_{plus} - \vec{B}_{minus}) \cdot \hat{n}_{rx}\vert{}$$
-
-### 🏆 Kết quả
-Việc sử dụng mẫu số $(r^2 + R^2)^{5/2}$ đã giải cứu hoàn toàn thuật toán tối ưu. Không gian Gradient trở nên mượt mà (smooth) ở ngay cả những điểm sát cuộn dây nhất. Thuật toán `least_squares` không còn bị hoảng loạn bởi việc chia cho số $0$, loại bỏ hoàn toàn hiện tượng ép biến $K \to 0$. Nhờ đó, nó thong thả tính toán các bước nhảy lớn, tìm ra chính xác các góc xoay **164°** và bám khít **100%** vào các đỉnh tín hiệu **10 mV - 13 mV** của cuộn vi sai thực tế.
-
----
-
-## 📊 4. Cấu Trúc Dữ Liệu Đầu Vào (Dataset Structure)
-
-Tập dữ liệu đo đạc (file CSV/Excel) bao gồm **15 cột** được sắp xếp theo chuẩn thứ tự ưu tiên cuộn phát (TX-major order) đối với nhóm tín hiệu EMF và quy chuẩn tọa độ Ground Truth 6-DOF:
-
-| Cột (Excel) | Tên Biến trong CSV | Ý Nghĩa Kỹ Thuật | Đơn Vị |
-| :---: | :--- | :--- | :---: |
-| **A (1)** | `Rx1 by Tx1` | Suất điện động thu trên $\text{RX}_1$ do cuộn phát $\text{TX}_1$ sinh ra | mV / V |
-| **B (2)** | `Rx1 by Tx2` | Suất điện động thu trên $\text{RX}_1$ do cuộn phát $\text{TX}_2$ sinh ra | mV / V |
-| **C (3)** | `Rx1 by Tx3` | Suất điện động thu trên $\text{RX}_1$ do cuộn phát $\text{TX}_3$ sinh ra | mV / V |
-| **D (4)** | `Rx2 by Tx1` | Suất điện động thu trên $\text{RX}_2$ do cuộn phát $\text{TX}_1$ sinh ra | mV / V |
-| **E (5)** | `Rx2 by Tx2` | Suất điện động thu trên $\text{RX}_2$ do cuộn phát $\text{TX}_2$ sinh ra | mV / V |
-| **F (6)** | `Rx2 by Tx3` | Suất điện động thu trên $\text{RX}_2$ do cuộn phát $\text{TX}_3$ sinh ra | mV / V |
-| **G (7)** | `Rx3 by Tx1` | Suất điện động thu trên $\text{RX}_3$ do cuộn phát $\text{TX}_1$ sinh ra | mV / V |
-| **H (8)** | `Rx3 by Tx2` | Suất điện động thu trên $\text{RX}_3$ do cuộn phát $\text{TX}_2$ sinh ra | mV / V |
-| **I (9)** | `Rx3 by Tx3` | Suất điện động thu trên $\text{RX}_3$ do cuộn phát $\text{TX}_3$ sinh ra | mV / V |
-| **J (10)** | `x` | Tọa độ Ground Truth vị trí $X$ của viên nang | mm |
-| **K (11)** | `y` | Tọa độ Ground Truth vị trí $Y$ của viên nang | mm |
-| **L (12)** | `z` | Tọa độ Ground Truth vị trí $Z$ của viên nang | mm |
-| **M (13)** | `roll` | Góc xoay Ground Truth quanh trục $X$ | degree (độ) |
-| **N (14)** | `pitch` | Góc xoay Ground Truth quanh trục $Y$ | degree (độ) |
-| **O (15)** | `yaw` | Góc xoay Ground Truth quanh trục $Z$ | degree (độ) |
-
-> ⚠️ **Lưu ý xử lý dữ liệu khi nạp vào Python:**  
-> - **Tín hiệu EMF (Cột 0 đến 8):** Trích xuất bằng `data[:, 0:9]`.  
-> - **Tọa độ thực tế (Cột 9 đến 11):** Bắt buộc chia cho $1000.0$ để quy đổi từ **mm** sang **m** (`data[:, 9:12] / 1000.0`) nhằm tương thích với đơn vị của mô hình vật lý.  
-> - **Góc xoay thực tế (Cột 12 đến 14):** Giữ nguyên đơn vị **độ (deg)** (`data[:, 12:15]`).
+- Đơn vị EMF ghi là V theo cách code đang dùng. Nếu cần so sánh tuyệt đối với mô hình vật lý, cần xác nhận lại hệ số khuếch đại mạch đo.
+- Vị trí GT có độ phân giải cỡ vài phần mười mm, đây là sai số nền của mọi kết quả định vị.
+- Các tham số hiệu chuẩn (K, pose TX, góc trục RX) tính trên file này đánh giá **trong mẫu**, chưa kiểm tra độc lập trên quỹ đạo khác.
